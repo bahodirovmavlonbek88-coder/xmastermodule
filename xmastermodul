@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>XMASTER — Давомат</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .disabled-btn {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800" onload="checkAuth()">
+
+  <!-- HEADER -->
+  <header class="bg-gray-900 text-white py-3 shadow-md">
+    <div class="max-w-full mx-auto px-3 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+        <div class="text-xl sm:text-2xl font-bold text-cyan-300 tracking-wider">XMASTER</div>
+        <div class="text-xs sm:text-sm opacity-90">Завод Давомат Тизими</div>
+      </div>
+      <div>
+        <button id="toggleAdd" class="flex items-center gap-1 sm:gap-2 bg-gray-800/60 hover:bg-gray-800/80 text-xs sm:text-sm px-3 py-2 rounded-md">
+          <span>˅</span>
+          <span>Ишчи қўшиш</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-full mx-auto px-3 py-6 sm:px-4 sm:py-8">
+    <!-- Add worker panel -->
+    <section id="addPanel" class="bg-white rounded-xl shadow p-4 sm:p-6 mb-6 hidden">
+      <h2 class="text-base sm:text-lg font-semibold mb-3">Ишчи қўшиш</h2>
+      <div class="grid grid-cols-1 gap-3">
+        <input id="inpName" class="border p-3 rounded text-sm sm:text-base" placeholder="Исм ва Фамилия" />
+        <input id="inpSalary" class="border p-3 rounded text-sm sm:text-base" placeholder="Ойлик (долларда)" type="number" />
+      </div>
+      <div class="mt-4 flex flex-col sm:flex-row gap-3">
+        <button id="btnAdd" class="bg-cyan-500 text-white px-4 py-2 rounded font-semibold hover:bg-cyan-600 w-full sm:w-auto">Қўшиш</button>
+        <button id="btnCloseAdd" class="px-4 py-2 rounded border w-full sm:w-auto">Бекор</button>
+      </div>
+    </section>
+
+    <!-- Workers list -->
+    <section class="bg-white rounded-xl shadow p-4 sm:p-6">
+      <h2 class="text-lg sm:text-xl font-semibold mb-4">Ишчилар рўйхати</h2>
+      <div id="workersList" class="grid gap-3"></div>
+      <p class="text-xs sm:text-sm text-gray-500 mt-4">“Келди” ёки “Келмади” тугмалари фақат 06:00–12:00 орасида фаол бўлади.</p>
+    </section>
+  </main>
+
+  <!-- HISTORY MODAL -->
+  <div id="historyModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center px-3">
+    <div class="bg-white p-5 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-sm">
+      <h2 id="modalName" class="text-lg sm:text-xl font-bold mb-4"></h2>
+      <ul id="historyList" class="space-y-2 text-gray-700 text-sm sm:text-base"></ul>
+      <button id="closeModal" class="bg-red-600 text-white px-4 py-2 mt-4 rounded hover:bg-red-700 w-full">Ёпиш</button>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center px-3">
+    <div class="bg-white p-5 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-sm">
+      <h2 class="text-lg sm:text-xl font-bold mb-4">Маълумотни таҳрирлаш</h2>
+      <input id="editName" class="border p-3 rounded w-full mb-3 text-sm sm:text-base" placeholder="Исм ва фамилия">
+      <input id="editSalary" class="border p-3 rounded w-full mb-4 text-sm sm:text-base" placeholder="Ойлик (долларда)" type="number">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="saveEdit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full">Сақлаш</button>
+        <button id="cancelEdit" class="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500 w-full">Бекор</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ——— KODNI HECH O‘ZGARTIRMADIM ——— */
+    function checkAuth() {
+      if (localStorage.getItem("authenticated") !== "true") {
+        window.location.href = "login.html";
+      }
+      start();
+    }
+
+    const KEY_W = 'xmaster_workers_v2';
+    const KEY_A = 'xmaster_attendance_v2';
+    const el = id => document.getElementById(id);
+    const uid = () => 'w_' + Math.random().toString(36).slice(2,9);
+    const todayISO = (d = new Date()) => d.toISOString().slice(0,10);
+    const nowHours = () => new Date().getHours();
+
+    function loadWorkers(){ return JSON.parse(localStorage.getItem(KEY_W) || '[]'); }
+    function saveWorkers(ws){ localStorage.setItem(KEY_W, JSON.stringify(ws)); }
+    function loadAtt(){ return JSON.parse(localStorage.getItem(KEY_A) || '{}'); }
+    function saveAtt(a){ localStorage.setItem(KEY_A, JSON.stringify(a)); }
+
+    el('toggleAdd').addEventListener('click', ()=> el('addPanel').classList.toggle('hidden'));
+    el('btnCloseAdd').addEventListener('click', ()=> el('addPanel').classList.add('hidden'));
+
+    el('btnAdd').addEventListener('click', ()=>{
+      const name = el('inpName').value.trim();
+      const salary = Number(el('inpSalary').value);
+      if(!name || !salary || salary <= 0) return alert('Илтимос, тўғри маълумот киритинг.');
+      const ws = loadWorkers();
+      ws.push({ id: uid(), name, salary, addedAt: todayISO() });
+      saveWorkers(ws);
+      el('inpName').value = ''; el('inpSalary').value = '';
+      el('addPanel').classList.add('hidden');
+      renderWorkers();
+    });
+
+    function renderWorkers(){
+      const container = el('workersList');
+      container.innerHTML = '';
+      const ws = loadWorkers();
+      const att = loadAtt();
+      const date = todayISO();
+      const hour = nowHours();
+      const canMark = (hour >= 6 && hour < 12);
+
+      ws.forEach(w=>{
+        const todayStatus = (att[date] && att[date][w.id]) || null;
+        const card = document.createElement('div');
+        card.className = 'flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-3 border rounded-lg hover:shadow transition';
+        card.innerHTML = `
+          <div class="cursor-pointer" onclick="showHistory('${w.id}')">
+            <div class="text-base sm:text-lg font-semibold text-gray-800">${w.name}</div>
+            <div class="text-xs text-gray-500">Қўшилган сана: ${w.addedAt}</div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+            <button class="presentBtn px-3 py-2 rounded-lg text-xs sm:text-sm font-medium text-white ${todayStatus==='present'?'bg-green-500':'bg-green-600 hover:bg-green-700'}" data-id="${w.id}" ${(!canMark||todayStatus)?'disabled':''}>Келди</button>
+            <button class="absentBtn px-3 py-2 rounded-lg text-xs sm:text-sm font-medium text-white ${todayStatus==='absent'?'bg-red-500':'bg-red-600 hover:bg-red-700'}" data-id="${w.id}" ${(!canMark||todayStatus)?'disabled':''}>Келмади</button>
+            <button class="editBtn bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium" data-id="${w.id}">✏️</button>
+            <button class="deleteBtn bg-gray-400 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium" data-id="${w.id}">Ўчириш</button>
+            <div id="stat_${w.id}" class="text-xs sm:text-sm text-gray-700 ml-1"></div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      document.querySelectorAll('.presentBtn').forEach(b=>b.onclick=()=>markAttendance(b.dataset.id,'present'));
+      document.querySelectorAll('.absentBtn').forEach(b=>b.onclick=()=>markAttendance(b.dataset.id,'absent'));
+      document.querySelectorAll('.deleteBtn').forEach(b=>b.onclick=()=>deleteWorker(b.dataset.id));
+      document.querySelectorAll('.editBtn').forEach(b=>b.onclick=()=>editWorker(b.dataset.id));
+      ws.forEach(w=>updateStat(w.id));
+    }
+
+    function markAttendance(workerId, status){
+      const hour = nowHours();
+      if(!(hour >= 6 && hour < 12)) return alert('Давомат фақат эрталаб 06:00–12:00 орасида белгиланади.');
+      const date = todayISO();
+      const att = loadAtt();
+      if(!att[date]) att[date] = {};
+      if(att[date][workerId]) return alert('Бугун учун аллақачон белгиланган.');
+      att[date][workerId] = status;
+      saveAtt(att);
+      renderWorkers();
+    }
+
+    function deleteWorker(id){
+      if(!confirm('Ростдан ҳам бу ишчини ўчирмоқчимисиз?')) return;
+      const ws = loadWorkers().filter(w=>w.id!==id);
+      saveWorkers(ws);
+      renderWorkers();
+    }
+
+    function editWorker(id){
+      const ws = loadWorkers();
+      const w = ws.find(x=>x.id===id);
+      if(!w) return;
+      el('editName').value = w.name;
+      el('editSalary').value = w.salary;
+      el('editModal').classList.remove('hidden');
+
+      el('saveEdit').onclick = ()=>{
+        const newName = el('editName').value.trim();
+        const newSalary = Number(el('editSalary').value);
+        if(!newName || !newSalary || newSalary <= 0) return alert('Маълумотни тўғри киритинг!');
+        w.name = newName;
+        w.salary = newSalary;
+        saveWorkers(ws);
+        el('editModal').classList.add('hidden');
+        renderWorkers();
+      };
+      el('cancelEdit').onclick = ()=> el('editModal').classList.add('hidden');
+    }
+
+    function updateStat(workerId){
+      const att = loadAtt();
+      const allDates = Object.keys(att).sort().reverse();
+      const last30 = allDates.slice(0, 30);
+      let presentDays = 0;
+      last30.forEach(d=>{ if(att[d] && att[d][workerId]==='present') presentDays++; });
+      const w = loadWorkers().find(x=>x.id===workerId);
+      const statEl = document.getElementById(`stat_${workerId}`);
+      if(!w || !statEl) return;
+      const daily = w.salary / 30;
+      if(last30.length >= 30){
+        const pay = presentDays * daily;
+        statEl.innerHTML = `<span class="font-semibold text-green-600">Ойлик: $${pay.toFixed(2)}</span>`;
+      } else {
+        statEl.innerHTML = `<span class="text-xs text-gray-500">${presentDays} кун келган</span>`;
+      }
+    }
+
+    function showHistory(id){
+      const w = loadWorkers().find(x=>x.id===id);
+      const att = loadAtt();
+      modalName.textContent = `${w.name} — Давомат тарихи`;
+      historyList.innerHTML = '';
+      Object.keys(att).sort().forEach(d=>{
+        if(att[d][id]){
+          const li = document.createElement('li');
+          li.textContent = `${d} — ${att[d][id] === 'present' ? 'Келди' : 'Келмади'}`;
+          historyList.appendChild(li);
+        }
+      });
+      modal.classList.remove('hidden');
+    }
+
+    const modal = el('historyModal');
+    const modalName = el('modalName');
+    const historyList = el('historyList');
+    const closeModal = el('closeModal');
+    closeModal.onclick = ()=> modal.classList.add('hidden');
+
+    function start(){
+      renderWorkers();
+      setInterval(renderWorkers, 60*1000);
+    }
+  </script>
+</body>
+</html>
